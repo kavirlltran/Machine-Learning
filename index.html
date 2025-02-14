@@ -115,7 +115,7 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
-    // Các dòng nội dung mẫu với dấu ' để chỉ âm tiết được nhấn mạnh
+    // Các dòng nội dung mẫu với dấu ' chỉ các âm tiết được nhấn mạnh.
     const lines = [
       "We should ‘finish the ‘project for our ‘history ‘class",
       "‘Peter is re‘vising for his e‘xam ‘next ‘week.",
@@ -124,28 +124,18 @@
       "I have ‘installed some ‘apps on my ‘phone"
     ];
 
-    // Hàm tính khoảng cách Levenshtein giữa hai chuỗi
-    function levenshteinDistance(a, b) {
-      const m = a.length;
-      const n = b.length;
-      const dp = [];
-      for (let i = 0; i <= m; i++) {
-        dp[i] = [i];
+    // Hàm mô phỏng đánh giá phát âm bằng ML
+    // (Trong thực tế, bạn sẽ sử dụng mô hình ML được huấn luyện trước để tính điểm số từ 0 đến 1)
+    function mlEvaluatePronunciation(expected, recognized) {
+      // Ví dụ mô phỏng: sử dụng một phương pháp đơn giản so sánh tỷ lệ ký tự giống nhau
+      expected = expected.toLowerCase();
+      recognized = recognized.toLowerCase();
+      let matchCount = 0;
+      const len = Math.max(expected.length, recognized.length);
+      for (let i = 0; i < Math.min(expected.length, recognized.length); i++) {
+        if (expected[i] === recognized[i]) matchCount++;
       }
-      for (let j = 0; j <= n; j++) {
-        dp[0][j] = j;
-      }
-      for (let i = 1; i <= m; i++) {
-        for (let j = 1; j <= n; j++) {
-          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-          dp[i][j] = Math.min(
-            dp[i - 1][j] + 1,
-            dp[i][j - 1] + 1,
-            dp[i - 1][j - 1] + cost
-          );
-        }
-      }
-      return dp[m][n];
+      return matchCount / len; // trả về điểm số từ 0 đến 1
     }
 
     function App() {
@@ -173,7 +163,7 @@
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
           const recognition = new SpeechRecognition();
-          recognition.continuous = true; // Ghi âm liên tục; chỉ dừng khi người dùng nhấn nút dừng
+          recognition.continuous = true; // Ghi âm liên tục; chỉ dừng khi nhấn nút dừng
           recognition.interimResults = false;
           recognition.lang = "en-US";
 
@@ -215,25 +205,23 @@
         }, 500);
       };
 
-      // So sánh transcript với nội dung mẫu sử dụng khoảng cách Levenshtein
+      // So sánh transcript với nội dung mẫu sử dụng ML đánh giá
       const evaluatePronunciation = () => {
         if (activeLineIndex === null) return;
-        const expectedText = lines[activeLineIndex].replace(/‘/g, "'");  // thay đổi ký tự đặc biệt nếu cần
+        // Chuyển ký tự đặc biệt sang dạng đơn giản nếu cần
+        const expectedText = lines[activeLineIndex].replace(/‘/g, "'");
         const recognizedText = transcript.trim();
         const expectedWords = expectedText.split(/\s+/);
         const recognizedWords = recognizedText.split(/\s+/);
 
-        // Ngưỡng cho phép (ví dụ: 30% khác biệt)
-        const threshold = 0.3;
-
+        // Ngưỡng điểm số ML (ví dụ: 0.7, nếu điểm số dưới 0.7 thì xem là lỗi)
+        const threshold = 0.7;
         const errors = expectedWords.map((word, idx) => {
-          const cleanExpected = word.replace(/[.,?!]/g, "").toLowerCase();
-          const cleanRecognized = ((recognizedWords[idx] || "")).replace(/[.,?!]/g, "").toLowerCase();
-          // Nếu từ ghi âm không tồn tại hoặc khác biệt vượt quá ngưỡng, đánh dấu là lỗi
+          const cleanExpected = word.replace(/[.,?!]/g, "");
+          const cleanRecognized = ((recognizedWords[idx] || "")).replace(/[.,?!]/g, "");
           if (!cleanRecognized) return word;
-          const distance = levenshteinDistance(cleanExpected, cleanRecognized);
-          const ratio = distance / cleanExpected.length;
-          return (ratio > threshold) ? word : null;
+          const score = mlEvaluatePronunciation(cleanExpected, cleanRecognized);
+          return (score < threshold) ? word : null;
         }).filter(word => word !== null);
 
         setFeedbacks(prev => ({
